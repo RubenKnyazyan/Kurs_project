@@ -1,1 +1,2 @@
-#ttry to copy files from 1 to 2 usb device 
+#Сopy files from 1 to 2 usb device 
+Задаются 2 серийных номера двух флешек. Если они обе вставлены, данные с одной переносятся на другую
