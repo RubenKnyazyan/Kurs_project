@@ -1,0 +1,299 @@
+%% -*- coding: utf-8 -*-
+\documentclass[12pt,a4paper]{scrartcl} 
+%\usepackage[14pt]{extsizes}
+\usepackage[utf8]{inputenc}
+\usepackage[english,russian]{babel}
+\usepackage{indentfirst}
+\usepackage{misccorr}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage[left=20mm, top=15mm, right=15mm, bottom=15mm, nohead, footskip=10mm]{geometry}
+\begin{document}
+\begin{titlepage}
+  \begin{center}
+    \large
+    МИНИСТЕРСТВО ОБРАЗОВАНИЯ И НАУКИ \\РОССИЙСКОЙ ФЕДЕРАЦИИ\\
+    федеральное государственное автономное образовательное учреждение высшего образования\\
+    «САНКТ-ПЕТЕРБУРГСКИЙ ГОСУДАРСТВЕННЫЙ УНИВЕРСИТЕТ 
+    АЭРОКОСМИЧЕСКОГО ПРИБОРОСТРОЕНИЯ»
+
+    Кафедра 43   
+    \end{center}
+	\vfill
+	\noindent КУРСОВОЙ ПРОЕКТ
+    \normalsize{}\\
+    \normalsize{ЗАЩИЩЕН С ОЦЕНКОЙ}\\
+    \normalsize{РУКОВОДИТЕЛЬ}
+    
+    \underline{ст.преп}
+    \hspace{5cm}
+    \underline{\hspace{4cm}}
+    \hspace{4cm}
+    \underline{М.Д.Поляк}
+    \vfill
+    
+	\begin{center}
+	\normalsize{ПОЯСНИТЕЛЬНАЯ ЗАПИСКА}\\
+	\normalsize{К КУРСОВОМУ ПРОЕКТУ}\\
+	\vfill
+	\normalsize{Резервное копирование}\\
+	\vfill
+    \textsc{по дисциплине: ОПЕРАЦИОННЫЕ СИСТЕМЫ}\\
+	\end{center}
+
+	\vfill
+	\noindent РАБОТУ ВЫПОЛНИЛ
+	\normalsize{}\\  
+	\normalsize{СТУДЕНТК ГР.}\hspace{1cm}\underline{4331}
+	\hspace{2cm}
+	\underline{\hspace{3cm}}
+	\hspace{3cm}
+	\underline{Князян.Р.А.}
+\vfill
+
+\begin{center}
+  Санкт-Петербург, 2016 г.
+\end{center}
+\end{titlepage}
+\newpage
+%\normalsize{Цель работы:реализовать демон для flash накопителей, осуществляющий резервное копирование данных под ОС Linux}\\
+\tableofcontents % Вывод содержания
+\newpage
+\section{Цель работы}
+	\normalsize{Цель работы: реализовать демон для flash накопителей, осуществляющий резервное копирование данных под ОС Linux}
+\section{Задание}
+	Реализовать демон для flash-накопителя, работающего через интерфейс USB, реализующий  копирование файлов между двумя flash-накопителями. При подключении двух flash-накопителей с заданными серийными номерами, демон должен запускать копирование файлов с одного накопителя на другой и сохранять текстовый лог успешно завершенных операций копирования на обоих flash-накопителях.
+\section{Техническая документация}
+\subsection{Установка}
+	Склонировать репозиторий с github при помощи команды: \begin{verbatim}
+	git clone https://github.com/RubenKnyazyan/Kurs_project.git
+	\end{verbatim}Для работы демона необходим установленный python версии 3.5.2 и выше.
+\subsection{Использование}
+	Разработанный демон поддерживает следующие команды: start, stop, status. Вызов команды осуществляется следующим образом: python deamon.py <команда>. Команда start запускает демона и создает PID-файл с ID процесса. Команда status сообщает о статусе демона(работает он или нет), а так же ID процесса, если демон запущен. Команда stop останавливает работу демона.  Команда restart перезапускает демон. 
+
+\section{Выводы}
+	В процессе выполнения данной курсовой работы мною были получены знания и навыки, необходимые для работы с USB носителями, потоками, файлами и папками,  в ОС семейства Linux, а так же знания и навыки в написании демонов.
+	\newpage
+\section{Приложения}
+deamon.ру:\begin{verbatim}
+#!/usr/bin/env python3
+import sys
+import os
+import shutil
+import logging
+import time
+import subprocess
+import pyudev
+from daemonize import Daemon
+ 
+context = pyudev.Context()
+logging.basicConfig(filename='/tmp/kursovoi.log', level=logging.DEBUG)
+SOURCE_SERIAL = 'Verbatim_STORE_N_GO_07AB1608151B5B72'
+DESTINATION_SERIAL = 'Corsair_Voyager_Mini_c3f41ad10ff131'
+WAIT = 60
+PIDFILE = '/tmp/daemon-kurs.pid'
+ 
+class KursDaemon(Daemon):
+ 
+    def run(self):
+        while True:
+            if try_copy():
+                sys.exit(0)
+            else:
+                time.sleep(WAIT)
+ 
+ 
+def copytree(src, dst):
+    result = None
+    process = subprocess.Popen('cp -rvf {0} {1}'.format(src, dst).split(), stdout=subprocess.PIPE)
+    result, error = process.communicate()
+    logging.debug(result)
+    return result.decode('utf-8').split('\n')
+ 
+ 
+def try_copy():
+    src, dst = None, None
+ 
+    # получить device name для флешек
+    src_id = '/dev/disk/by-id/usb-{0}-0:0-part1'.format(SOURCE_SERIAL)
+    dst_id = '/dev/disk/by-id/usb-{0}-0:0-part1'.format(DESTINATION_SERIAL)
+    logging.debug(src_id)
+    src_device_name, dst_device_name = None, None
+    if os.path.islink(src_id):
+        src_device_name = os.readlink(src_id).split("/")[-1]
+        logging.debug(src_device_name)
+    if os.path.islink(dst_id):
+        dst_device_name = os.readlink(dst_id).split("/")[-1]
+    if not src_device_name:
+        logging.error('No source device')
+        return False
+    if not dst_device_name:
+        logging.error('No destination device')
+        return False
+    # получить пути, куда смонтированы
+    mtab = open('/etc/mtab', 'r')
+    src_path, dst_path = None, None
+    for line in mtab.readlines():
+        if src_device_name in line:
+            src_path = line.split(' ')[1]
+        if dst_device_name in line:
+            dst_path = line.split(' ')[1]
+    if not src_path:
+        logging.error('Source device is not mounted!')
+    if not dst_path:
+        logging.error('Destination device is not mounted!')
+    if not src_path or not dst_path:
+        return False
+    # собственно копирование
+    result = copytree(src_path + '/', dst_path + '/')
+    dst_log = open(dst_path + '/copied.log', 'w')
+    src_log = open(src_path + '/copied.log', 'w')
+    for f in result:
+        dst_log.write(f + '\n')
+        src_log.write(f + '\n')
+    dst_log.close()
+    src_log.close()
+    return True
+ 
+ 
+if __name__ == '__main__':
+    if len(sys.argv) != 2 or sys.argv[1] not in ["start", "stop", "status", "restart"]:
+        print("Запускайте так: python main.py start|stop|status|restart")
+        sys.exit(1)
+    daemon = KursDaemon(PIDFILE)
+    if sys.argv[1] == "start":
+        daemon.start()
+    elif sys.argv[1] == "stop":
+        daemon.stop()
+    elif sys.argv[1] == "restart":
+        daemon.restart()
+    elif sys.argv[1] == "status":
+        if os.path.isfile(PIDFILE):
+            pidfile = open(PIDFILE, "r")
+            pid = pidfile.read()
+            print("Запущен с PID={0}".format(pid))
+        else:
+            print("Демон пока что не запущен")
+Class Deamon
+import sys, os, time, atexit
+from signal import SIGTERM
+
+class Daemon:
+
+        def __init__(self, pidfile, stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
+                self.stdin = stdin
+                self.stdout = stdout
+                self.stderr = stderr
+                self.pidfile = pidfile
+
+        def daemonize(self):
+                try:
+                        pid = os.fork()
+                        if pid > 0:
+                                # exit first parent
+                                sys.exit(0)
+                except OSError as e:
+                        sys.stderr.write("fork #1 failed: %d (%s)\n" % (e.errno, e.strerror))
+                        sys.exit(1)
+
+                # decouple from parent environment
+                os.chdir("/")
+                os.setsid()
+                os.umask(0)
+
+                # do second fork
+                try:
+                        pid = os.fork()
+                        if pid > 0:
+                                # exit from second parent
+                                sys.exit(0)
+                except OSError as e:
+                        sys.stderr.write("fork #2 failed: %d (%s)\n" % (e.errno, e.strerror))
+                        sys.exit(1)
+
+                # redirect standard file descriptors
+                sys.stdout.flush()
+                sys.stderr.flush()
+                si = open(self.stdin, 'r')
+                so = open(self.stdout, 'a+')
+                # se = open(self.stderr, 'a+', 0)
+                os.dup2(si.fileno(), sys.stdin.fileno())
+                os.dup2(so.fileno(), sys.stdout.fileno())
+                # os.dup2(se.fileno(), sys.stderr.fileno())
+
+                # write pidfile
+                atexit.register(self.delpid)
+                pid = str(os.getpid())
+                open(self.pidfile,'w+').write("%s\n" % pid)
+
+        def delpid(self):
+                os.remove(self.pidfile)
+
+        def start(self):
+                """
+                Start the daemon
+                """
+                # Check for a pidfile to see if the daemon already runs
+                try:
+                        pf = open(self.pidfile,'r')
+                        pid = int(pf.read().strip())
+                        pf.close()
+                except IOError:
+                        pid = None
+
+                if pid:
+                        message = "pidfile %s already exist. Daemon already running?\n"
+                        sys.stderr.write(message % self.pidfile)
+                        sys.exit(1)
+
+                # Start the daemon
+                self.daemonize()
+                self.run()
+
+        def stop(self):
+                """
+                Stop the daemon
+                """
+                # Get the pid from the pidfile
+                try:
+                        pf = open(self.pidfile,'r')
+                        pid = int(pf.read().strip())
+                        pf.close()
+                except IOError:
+                        pid = None
+
+                if not pid:
+                        message = "pidfile %s does not exist. Daemon not running?\n"
+                        sys.stderr.write(message % self.pidfile)
+                        return # not an error in a restart
+
+                # Try killing the daemon process       
+                try:
+                        while 1:
+                                os.kill(pid, SIGTERM)
+                                time.sleep(0.1)
+                except OSError as err:
+                        err = str(err)
+                        if err.find("No such process") > 0:
+                                if os.path.exists(self.pidfile):
+                                        os.remove(self.pidfile)
+                        else:
+                                print(str(err))
+                                sys.exit(1)
+
+        def restart(self):
+                """
+                Restart the daemon
+                """
+                self.stop()
+                self.start()
+
+        def run(self):
+                """
+                You should override this method when you subclass Daemon. It will be called after the process has been
+                daemonized by start() or restart().
+                """
+
+\end{verbatim}
+	\newpage
+\end{document}
