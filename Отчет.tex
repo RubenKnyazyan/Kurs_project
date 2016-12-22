@@ -72,16 +72,15 @@
 	\begin{enumerate}
 	\item Сборка проекта: \\
 		Необходимо перейти в корневой каталог репозитория и вызвать команду
-		g++ deamon.c -o deamon.o. Демон будет скомпилирован.
+		make. Демон будет скомпилирован.
 	\item Запуск проекта: \\
-		После того, как демон был скомпилирован, его необходимо настроить (см. пункт 3) и запустить.
-		Запуск производится командой\begin{verbatim} ./deamon.o \end{verbatim}
+		После того, как демон был скомпилирован, он будет и автоматически запущен
 	\item Использование демона: \\
 		Перед использованием демона необходимо указать серийные номера флеш-накопителей, путь к каталогу флеш-накопителей.
-		Задаются они в файле deamon.c,\begin{verbatim}
+		Задаются они в файле deamon.c, (пример)\begin{verbatim}
 				//указываем серийный номер накопителей
-				serial1 = (char*)"желаемый ид флешки1";
-				serial2 = (char*)"желаемый ид флешки2";
+				serial1 = (char*)"07AB1608151B5B72";
+				serial2 = (char*)"c3f41ad10ff131";
 				dir_serial1 = (char*)"/media/ruben/STORE/";
 				dir_serial2 = (char*)"/media/ruben/B480-C68C/";;
 				\end{verbatim}
@@ -115,23 +114,24 @@ deamon.c:\begin{verbatim}
 #include <sys/types.h> // для создания папки
 
 
-static char* path_log_file = (char*)"/home/ruben/try2/usb_deamon.log";
-static char* serial1 = (char*)"c3f41ad10ff131";
-static char* dir_serial1 = (char*)"/media/ruben/B480-C68C/";
-static char* serial2 = (char*)"07AB1608151B5B72";
-static char* dir_serial2 = (char*)"/media/ruben/STORE/";
 
+static char* serial1 = (char*)"07AB1608151B5B72";
+static char* dir_serial1 = (char*)"/media/ruben/STORE/";
+static char* serial2 = (char*)"c3f41ad10ff131";
+static char* dir_serial2 = (char*)"/media/ruben/B480-C68C/";
+//static char* dir_comp = (char*)"/home/ruben/try2/1/";
+static char* path_log_file1 = (char*)"/media/ruben/STORE/1.log";
+static char* path_log_file2 = (char*)"/media/ruben/B480-C68C/1.log";
 
-int Daemon(void);
-// char* getTime();
+int Deamon(void);
 int writeLog(char msg[256]);
-char* getCommand(char command[128]);
 char* getSerial( char *str );
 int isSerial(char* ser);
 void copyFile(std::string pathFrom, std::string pathTo, std::string fileName);
 void copyDir(std::string pathFrom, std::string pathTo);
 int fileSize( std::fstream &f );
 
+//функция получающая серийный номер
 char* getSerial( char *str ) 
 {
     ssize_t len;
@@ -148,16 +148,12 @@ char* getSerial( char *str )
         return (char*)"-";
     }
     buf[len] = '\0';
-    // printf("%s\n", buf);/sys/block/sys/block/sdb
     sprintf(buf2, "%s/%s", "/sys/block/", buf);
-    // printf("до %s\n", buf2);
     for (i=0; i<6; i++) {
         p = strrchr(buf2, '/');
         *p = 0;
     }
-    // printf("после %s\n", buf2);
     strcat(buf2, "/serial");
-    // printf("opening %s\n", buf2);
 
     int f = open(buf2, 0);
     if (f == -1) return (char*)"-";
@@ -166,12 +162,13 @@ char* getSerial( char *str )
         return (char*)"-";
     }
     buf[len-1] = '\0';
-    //printf("serial: %s\n", buf);
+    
     strcat(comText, buf);
 
     return comText;
 }
 
+//функция проверяющая серийный номер на соответствие заданному
 int isSerial(char* ser)
 {
     if (strcmp(getSerial((char*)"/sys/block/sdb"), ser) == 0
@@ -185,27 +182,11 @@ int isSerial(char* ser)
     return 0;
 }
 
-/*char* getCommand(char command[128]) { //функция возвращает результат выполнения linux команды
-    FILE *pCom;
-    static char comText[256];
-    bzero(comText, 256);
-    char  buf[64];
-    pCom = popen(command, "r"); //выполняем
-    if(pCom == NULL) {
-        writeLog((char*)"Error Command");
-        return (char*)"";
-    }
-    strcpy(comText, "");
-    while(fgets(buf, 64, pCom) != NULL) { //читаем результат
-        strcat(comText, buf);
-    }
-    pclose(pCom);
-    return comText;
-}*/
 
-int writeLog(char* msg) { //функция записи строки в лог
+int writeLog(char msg[256]) { //функция записи строки в лог
+
     FILE * pLog;
-    pLog = fopen(path_log_file, "a");
+    pLog = fopen(path_log_file1, "a");
     if(pLog == NULL) {
         return 1;
     }
@@ -215,91 +196,73 @@ int writeLog(char* msg) { //функция записи строки в лог
     strcat(str, (char*)"\n");
     fputs(str, pLog);
     fclose(pLog);
+
+	FILE * pLog2;
+    pLog2 = fopen(path_log_file2, "a");
+    if(pLog2 == NULL) {
+        return 1;
+    }
+    char str2[1024];
+    bzero(str2, 1024);
+    strcat(str2, msg);
+    strcat(str2, (char*)"\n");
+    fputs(str2, pLog2);
+    fclose(pLog2);
     return 0;
 }
 
-int main(int argc, char* argv[]) {
-    pid_t parpid, sid;
-    
-    parpid = fork(); //создаем дочерний процесс
-    if(parpid < 0) {
-        exit(1);
-    } else if(parpid != 0) {
-        exit(0);
-    } 
-    umask(0);//даем права на работу с фс
-    sid = setsid();//генерируем уникальный индекс процесса
-    if(sid < 0) {
-        exit(1);
-    }
-    if((chdir("/")) < 0) {//выходим в корень фс
-        exit(1);
-    }
-    close(STDIN_FILENO);//закрываем доступ к стандартным потокам ввода-вывода
-    close(STDOUT_FILENO);
-    close(STDERR_FILENO);
-    
-    return Daemon();
-}
-
-int Daemon(void) 
-{ 
-    // char *log;
-    while(1) //собственно наш бесконечный цикл демона
-    {
-        // log = getCommand((char*)"who");
-        if(isSerial(serial1) && isSerial(serial2)) // 
-        {
-            copyDir(dir_serial1, dir_serial2);
-            writeLog((char*)"\n###############################################################\n");
-        }
-        sleep(3);//ждем
-    }
-    return 0;
-}
 
 void copyFile(std::string pathFrom, std::string pathTo, std::string fileName)
 {
-    std::string way1 = pathFrom;
-    std::string way2 = pathTo;
+    writeLog((char*) "Copping...");
 
-    way1 = way1+fileName;
-    way2 = way2+fileName;
+    std::string _pathFrom = pathFrom;
+    std::string _pathTo = pathTo;
+
+    _pathFrom = _pathFrom+fileName;
+    _pathTo = _pathTo+fileName;
 
     char myA[fileName.size()+1];
     strcpy(myA, fileName.c_str());
 
     if (strcmp(myA,".") == 0 || strcmp(myA,"..") == 0)
     {
-        std::cout << "New Branch\n";
+        writeLog((char*) "New Branch");
+        
     }
     else
     {
-        const char * c1 = way1.c_str(); 
-        const char * c2 = way2.c_str(); 
+        const char * c1 = _pathFrom.c_str(); 
+        const char * c2 = _pathTo.c_str(); 
 
         char * buffer;
         buffer = new char;
     
         std::fstream infile(c1, std::ios::in | std::ios::binary);
-        if (!infile.is_open()) // если файл не открыт
-            std::cout << "Файл не может быть открыт!\n"; // сообщить об этом
+        if (!infile.is_open()) {// если файл не открыт
+           writeLog((char*) "Файл не открывается!"); // сообщить об этом
+           //writeLog((char*) c1);
+           //
+       }
         else 
         {
+            writeLog((char*) "Файл открылся!");
             infile.read(buffer, sizeof(char)); //читаем первый сивол
             std::string log = "";
 
             if (infile.fail() && !infile.eof()) //проверка на папку
             {
                 infile.close();
-                remove(way2.c_str());
+                remove(_pathTo.c_str());
                 log = c2;
                 log = "dir: " + log;
-                mkdir(way2.c_str(), 0755);
-                std::cout << way2 << " -- Это папка.\n";
-                copyDir(way1 + "/", way2 + "/");
+                mkdir(_pathTo.c_str(), 0755);
+                //writeLog((char*) _pathTo);
+                writeLog((char*)" -- Это папка.\n");
+                copyDir(_pathFrom + "/", _pathTo + "/");
             }
-            else { //иначе файл
+            else 
+            { //иначе файл
                 std::fstream outfile(c2, std::ios::out | std::ios::app | std::ios::binary); //открываем файл для записи  
                 outfile.seekg(0, std::ios::beg);
 
@@ -325,14 +288,16 @@ void copyFile(std::string pathFrom, std::string pathTo, std::string fileName)
             writeLog((char *) log.c_str());
         }
         delete buffer;
-        std::cout << way1 << "->" << way2 << std::endl;
+        std::cout << _pathFrom << "->" << _pathTo << std::endl;
     }
 }
 
 void copyDir(std::string pathFrom, std::string pathTo)
 {
+     writeLog((char*) "Папка тут!");
     struct dirent **namelist;
     int n;
+
     n = scandir(pathFrom.c_str(), &namelist, 0, alphasort);
     if (n >= 0)
     {
@@ -345,6 +310,7 @@ void copyDir(std::string pathFrom, std::string pathTo)
     }
 }
 
+
 int fileSize( std::fstream &f )
 {
     int size, saveTellg;
@@ -354,6 +320,60 @@ int fileSize( std::fstream &f )
     f.seekg(saveTellg, std::ios::beg);
     return size;
 }
+
+int Deamon(void) { //наш бесконечный цикл демона
+    while(1) {
+    if(isSerial(serial1) && isSerial(serial2)) // Если это необходимая флешка
+        {
+            writeLog((char*) dir_serial1);
+			writeLog((char*) "  to  ");
+			writeLog((char*) dir_serial2);
+            copyDir(dir_serial1, dir_serial2);//запускаем функцию копирования
+			//copyDir(dir_serial2, dir_serial1);//запускаем функцию копирования
+            writeLog((char*)"\n+++++++++++++++++++++++++++++++++++++++\n");
+        }
+        sleep(3);//ждем до следующей итерации
+    }
+    return 0;
+}
+
+int main(int argc, char* argv[]) {
+    writeLog((char*)"USBDeamon Start");
+
+    pid_t parpid, sid;
+    
+    parpid = fork(); //создаем дочерний процесс
+
+    if(parpid < 0) 
+        {
+            exit(1);
+        } 
+    else if(parpid != 0) 
+        {
+            exit(0);
+        } 
+
+    umask(0);//даем права на работу с фс
+
+    sid = setsid();//генерируем уникальный индекс процесса
+
+    if(sid < 0) 
+        {
+            exit(1);
+        }
+
+    if((chdir("/")) < 0) 
+        {//выходим в корень фс
+            exit(1);
+        }
+
+    close(STDIN_FILENO);//закрываем доступ к стандартным потокам ввода-вывода
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
+    
+    return Deamon();
+}
+
 \end{verbatim}
 	\newpage
 \end{document}

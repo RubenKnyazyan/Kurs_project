@@ -1,0 +1,3 @@
+all:
+	g++ usb_copy.c -o usb.o
+	./usb.o
