@@ -21,13 +21,8 @@ static char* serial1 = (char*)"c3f41ad10ff131";
 static char* dir_serial1 = (char*)"/media/ruben/B480-C68C/";
 static char* serial2 = (char*)"07AB1608151B5B72";
 static char* dir_serial2 = (char*)"/media/ruben/STORE/";
-
-/*static char* serial1 = (char*)"COUF9LAZ";
-static char* dir_serial1 = (char*)"/run/media/alim/5B87-AB6D/";
-static char* serial2 = (char*)"07AB1608151B5B72";
-static char* dir_serial2 = (char*)"/home/alim/kp1/";*/
-// const int NUM_THREADS = 10;1
-// pthread_t threads[NUM_THREADS];
+static char* path_log_file1 = (char*)"/media/ruben/STORE/1.log";
+static char* path_log_file2 = (char*)"/media/ruben/B480-C68C/1.log";
 
 pthread_t th;
 sem_t sem_name;
@@ -43,7 +38,6 @@ struct structFile {
 int Daemon(void);
 // char* getTime();
 int writeLog(char msg[256]);
-char* getCommand(char command[128]);
 char* getSerial( char *str );
 int isSerial(char* ser);
 void* copyFile(void *args);
@@ -105,30 +99,15 @@ int isSerial(char* ser)
     return 0;
 }
 
-char* getCommand(char command[128]) { //функция возвращает результат выполнения linux команды
-    FILE *pCom;
-    static char comText[256];
-    bzero(comText, 256);
-    char  buf[64];
-    pCom = popen(command, "r"); //выполняем
-    if(pCom == NULL) {
-        writeLog((char*)"Error Command");
-        return (char*)"";
-    }
-    strcpy(comText, "");
-    while(fgets(buf, 64, pCom) != NULL) { //читаем результат
-        strcat(comText, buf);
-    }
-    pclose(pCom);
-    return comText;
-}
 
 int writeLog(char* msg) 
 { //функция записи строки в лог
     sem_wait(&mutex); //ждем пока семафор освободится
-    FILE * pLog;
-    pLog = fopen(path_log_file, "a");
+	
+	FILE * pLog;
+    pLog = fopen(path_log_file1, "a");
     if(pLog == NULL) {
+	sem_post(&mutex);
         return 1;
     }
     char str[1024];
@@ -137,6 +116,20 @@ int writeLog(char* msg)
     strcat(str, (char*)"\n");
     fputs(str, pLog);
     fclose(pLog);
+
+	FILE * pLog2;
+    pLog2 = fopen(path_log_file2, "a");
+    if(pLog2 == NULL) {
+	sem_post(&mutex);
+        return 1;
+    }
+    char str2[1024];
+    bzero(str2, 1024);
+    strcat(str2, msg);
+    strcat(str2, (char*)"\n");
+    fputs(str2, pLog2);
+    fclose(pLog2);
+
     sem_post(&mutex);
     return 0;
 }
